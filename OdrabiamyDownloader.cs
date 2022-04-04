@@ -1,49 +1,55 @@
 ﻿using Newtonsoft.Json.Linq;
-using System.Net.Http.Json;
 using System.Text.Json;
 using OdrabiamyD.Models;
-using System.IO;
 using HtmlAgilityPack;
 
 namespace OdrabiamyD
 {
     /// <summary>
-    /// Represents the headers of the internal HttpClient
+    /// Enum reprezentujący stan headerów w wewnętrzym obiekcie HttpClient obieku OdrabiamyDownloader
     /// </summary>
     public enum Headers
     {
         /// <summary>
-        /// Represents the non-premium headers for the internal HttpClient
+        /// Reprezentuje headery non-premium wewnętrznego HttpClient
         /// </summary>
         NonPremium,
         /// <summary>
-        /// Represents the premium headers for the internal HttpClient
+        /// Reprezentuje headery premium wewnętrznego HttpClient
         /// </summary>
         Premium
     }
     /// <summary>
-    /// Downloads books and pages from Odrabiamy.pl
+    /// Pobiera strony i książki ze strony Odrabiamy.pl
     /// </summary>
     public class OdrabiamyDownloader
     {
         private readonly string? _apiAdress;
         private HttpClient _client = new HttpClient();
         /// <summary>
-        /// Current headers of the internal HttpClient
+        /// Obecne headery wewnętrznego obiektu HttpClient
         /// </summary>
         public Headers Headers { get; private set; } = Headers.NonPremium;
-
         /// <summary>
-        /// OdrabiamyDownloader constructor
+        /// Event zgłaszający stan pobierania
         /// </summary>
         /// <remarks>
-        /// If there is no valid api endpoint adress in the .config file, and you do not specify
-        /// an adress at object creation, a ConfigurationErrorsException will be thrown. Headers are
-        /// set to <c>NonPremium</c> by default.
+        /// Obsłuż aby uzyskiwać informacje o stanie pobierania
         /// </remarks>
-        /// <param name="apiAdress">Optional adress of the api endpoint</param>
+        public event Action<string>? DownloadStatus;
+
+        /// <summary>
+        /// Konstruktor obiektu
+        /// </summary>
+        /// <remarks>
+        /// Jeżeli w pliku .config nie ma ustawionego adresu endpointu api Odrabiamy.pl i nie 
+        /// podasz go jako parametr konstruktora to zostanie zgłoszony wyjątek <c>ConfigurationErrorsException</c>. 
+        /// Headery zawsze domyślnie ustawione są na <c>NonPremium</c>.
+        /// </remarks>
+        /// <param name="apiAdress">Opcjonalny adress endpointu api</param>
         /// <exception cref="System.Configuration. ConfigurationErrorsException">
-        /// Throw when there is no api endpoint adress in the .config file
+        /// Zgłaszany gdy w pliku konfiguracyjnym nie ma podanego adressu endpoint api,
+        /// a konstruktor nie otrzymał tego adresu.
         /// </exception>
         public OdrabiamyDownloader(string? apiAdress = default)
         {
@@ -56,9 +62,9 @@ namespace OdrabiamyD
                     .AppSettings["apiAdress"] ??
                     throw new System.Configuration.
                     ConfigurationErrorsException("No apiAdress specified in the config file!");
+            else
+                _apiAdress = apiAdress;
 
-
-            //headery domyślnie są nonpremium
             _client.DefaultRequestHeaders.Clear();
             _client.DefaultRequestHeaders.Accept.Add(
                 new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("*/*"));
@@ -74,8 +80,11 @@ namespace OdrabiamyD
 
         }
         /// <summary>
-        /// Changes the headers for the internal HttpClient
+        /// Zmienia headery wewnętrznego HttpClient
         /// </summary>
+        /// <remarks>
+        /// Żeby korzystać metod z "Premium" w nazwie, trzeba zmienić headery na <c>Headers.Premium</c> 
+        /// </remarks>
         /// <param name="headers"></param>
         public void ChangeHeaders(Headers headers)
         {
@@ -113,18 +122,19 @@ namespace OdrabiamyD
         }
 
         /// <summary>
-        /// For given login and password, gets the token from the api endpoint adress
+        /// Dla podanego loginu i hasła, uzyskuje token potrzebny do pobierania premium
         /// </summary>
-        /// <param name="user">User login</param>
-        /// <param name="password">User password</param>
-        /// <param name="ctoken">Cancellation token</param>
-        /// <returns>The token as a <c>string</c> </returns>
-        /// <exception cref="Exception">Throw when cannot obtain token</exception>
+        /// <param name="user"></param>
+        /// <param name="password"></param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne</exception>
+        /// <exception cref="Exception">Zgłaszany gdy nie dało się pozyskać tokenu</exception>
         public async Task<string?> GetTokenAsync(string user, string password, 
             CancellationToken ctoken = default)
         {
             if (Headers != Headers.NonPremium)
-                throw new Exception("Headers must be set to NonPremium!");
+                throw new WrongHeadersException("Wrong headers!", Headers);
             string? token;
             var content = new
             {
@@ -157,58 +167,57 @@ namespace OdrabiamyD
             return token;
         }
         /// <summary>
-        /// Tries to download all pages of a book with given data
+        /// Próbuje pobrać wszystkie strony w podanym przedziale i tworzy z nich książkę
         /// </summary>
-        /// <param name="token">Login token</param>
-        /// <param name="startpage">Page from which start downloading</param>
-        /// <param name="lastpage">The last page to download</param>
-        /// <param name="bookid">Book ID</param>
-        /// <param name="ctoken">Cancellation token</param>
-        /// <returns>A <c>Page[]</c> containing downloaded pages</returns>
-        /// <exception cref="ArgumentException">Throw when there was no page to download for given number
-        /// </exception>
-        /// <exception cref="Exception">Throw when there was no page to download for given number
+        /// <param name="token"></param>
+        /// <param name="startpage">Pierwsza strona</param>
+        /// <param name="lastpage">Ostatnia strona</param>
+        /// <param name="bookid">ID Cionszki</param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
         /// </exception>
         public async Task<Book> DownloadBookAsync(string token, int startpage, int lastpage, int bookid,
             CancellationToken ctoken = default)
         {
             if (Headers != Headers.NonPremium)
-                throw new Exception("Headers must be set to NonPremium!");
+                throw new WrongHeadersException("Wrong headers!", Headers);
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
             var pages = new List<Page>();
             for (int pageN = startpage; pageN <= lastpage; pageN++)
             {
                 try
                 {
                     pages.Add(await DownloadPageAsync(token, pageN, bookid, ctoken) ??
-                        throw new ArgumentException("No pages to download"));
+                        throw new Exception());
                 }
                 catch { }
             }
-            
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.ToArray());
         }
         /// <summary>
-        /// Tries to download all pages of a book with given data using a premium acoount
+        /// Próbuje pobrać wszystkie strony w podanym przedziale i tworzy z nich książkę,
+        /// używając konta premium
         /// </summary>
-        /// <param name="token">Login token</param>
-        /// <param name="startpage">Page from which start downloading</param>
-        /// /// <param name="lastpage">The last page to download</param>
-        /// <param name="bookid">Book ID</param>
-        /// <param name="ctoken">Cancellation token</param>
-        /// <returns>A <c>Page[]</c> containing downloaded pages</returns>
+        /// <param name="token"></param>
+        /// <param name="startpage">Strona startowa</param>
+        /// /// <param name="lastpage">Ostatnia strona</param>
+        /// <param name="bookid">ID Cionszki</param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
         /// <exception cref="ArgumentException">Throw when there was no page to download for given number
         /// </exception>
-        /// <exception cref="Exception">Throw when there was no page to download for given number
+        /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
         /// </exception>
         public async Task<Book> DownloadBookPremiumAsync(string token, int startpage, int lastpage, int bookid,
             CancellationToken ctoken = default)
         {
             if (Headers != Headers.Premium)
-                throw new Exception("Headers must be set to Premium!");
-
+                throw new WrongHeadersException("Wrong headers!", Headers);
             var pages = new List<Page>();
-            
-            for(int pageN = startpage; pageN <= lastpage; pageN++)
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+            for (int pageN = startpage; pageN <= lastpage; pageN++)
             {
                 try
                 {
@@ -217,35 +226,40 @@ namespace OdrabiamyD
                 }
                 catch(DailyLimitExceededException)
                 {
+                    DownloadStatus?.Invoke("Daily download limit reached!");
                     break;
                 }
-                catch { }
+                catch 
+                {
+                    DownloadStatus?.Invoke($"Could not download page {pageN}!");
+                }
             }
-            
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.ToArray());
         }
         /// <summary>
-        /// Downloads a page with given data 
+        /// Pobiera stronę w wersji premium
         /// </summary>
         /// <param name="token"></param>
-        /// <param name="page"></param>
-        /// <param name="bookid"></param>
+        /// <param name="page">Numer strony</param>
+        /// <param name="bookid">ID Cionszki</param>
         /// <param name="ctoken"></param>
         /// <returns></returns>
+        /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
+        /// </exception>
+        /// <exception cref="DailyLimitExceededException">Zgłaszany gdy dzienny limit pobrań został przekroczony</exception>
         public async Task<Page?> DownloadPagePremiumAsync(string token, int page, int bookid, 
             CancellationToken ctoken = default)
         {
             if (Headers != Headers.Premium)
-                throw new Exception("Headers must be set to Premium!");
+                throw new WrongHeadersException("Wrong headers!", Headers);
 
             _client.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue(token);
 
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get,
                 $@"https://odrabiamy.pl/api/v2/exercises/page/premium/{page}/{bookid}");
-
-            //https://odrabiamy.pl/api/v2/exercises/page/premium/{page}/{bookid}
-            //http://localhost:8080/
+            DownloadStatus?.Invoke($"Started download of page {page}");
             var response = await _client.SendAsync(request, ctoken);
 
             var jsonr = await response.Content.ReadAsStringAsync(ctoken);
@@ -257,64 +271,66 @@ namespace OdrabiamyD
                     "Daily premium limit exceeded!");
             
             var pagedata = content?["data"]?[0]?["solution"]?.Value<string>();
-
+            DownloadStatus?.Invoke($"Finished download of page {page}");
             return new Page(page, pagedata ?? string.Empty);
         }
         /// <summary>
-        /// Downloads a page with given data
+        /// Pobiera stronę
         /// </summary>
         /// <param name="token"></param>
-        /// <param name="page"></param>
-        /// <param name="bookid"></param>
+        /// <param name="page">Numer strony</param>
+        /// <param name="bookid">ID Cionszki</param>
         /// <param name="ctoken"></param>
-        /// <returns>HTML code of the page solution as <c>string</c> </returns>
+        /// <returns></returns>
+        /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
+        /// </exception>
         public async Task<Page?> DownloadPageAsync(string token, int page, int bookid,
             CancellationToken ctoken = default)
         {
             if (Headers != Headers.NonPremium)
-                throw new Exception("Headers must be set to NonPremium!");
+                throw new WrongHeadersException("Wrong headers!", Headers);
 
             _client.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue(token);
 
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get,
                 $@"https://odrabiamy.pl/api/v2/exercises/page/{page}/{bookid}");
-
+            DownloadStatus?.Invoke($"Started download of page {page}");
             var response = await _client.SendAsync(request, ctoken);
             var jsonr = await response.Content.ReadAsStringAsync(ctoken);
             JObject? content = (JObject?)Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(jsonr);
 
             var pagedata = content?["data"]?[0]?["solution"]?.Value<string>();
-
+            DownloadStatus?.Invoke($"Finished download of page {page}");
             return new Page(page, pagedata ?? string.Empty);
         }
         /// <summary>
-        /// Saves a page as HTML
+        /// Zapisuje stronę jako plik HTML
         /// </summary>
-        /// <param name="page">Page to save</param>
-        /// <param name="path">Path</param>
+        /// <param name="page"></param>
+        /// <param name="path">Ścieżka pliku</param>
         public void SavePageAsHTML(Page page, string path)
         {
 
             File.WriteAllText(Path.ChangeExtension(path, "html"), page.Content);
         }
         /// <summary>
-        /// Saves a page as HTML asynchronously
+        /// Zapisuje stronę jako plik HTML asynchronicznie
         /// </summary>
-        /// <param name="page">Page to save</param>
-        /// <param name="path">Path</param>
-        /// <param name="ctoken">Cancellation token</param>
-        /// <returns>a task that represents the asynchronous save operation</returns>
+        /// <param name="page"></param>
+        /// <param name="path">Ścieżka pliku</param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
         public async Task SavePageAsHTMLAsync(Page page, string path, 
             CancellationToken ctoken = default)
         {
             await File.WriteAllTextAsync(Path.ChangeExtension(path, "html"), page.Content, ctoken);
         }
         /// <summary>
-        /// Creates a directory and saves all pages of the book provided
+        /// Tworzy folder i zapisuje w nim wszystkie strony książki jako pliki HTML
         /// </summary>
-        /// <param name="book">Book to save</param>
-        /// <param name="dirpath">Directory path</param>
+        /// <param name="book"></param>
+        /// <param name="dirpath">Ścieżka folderu</param>
         public void SaveBookAsHTML(Book book, string dirpath)
         {
             Directory.CreateDirectory(dirpath);
@@ -324,12 +340,12 @@ namespace OdrabiamyD
             }
         }
         /// <summary>
-        /// Creates a directory and saves all pages of the book provided asynchronously
+        /// Tworzy folder i zapisuje w nim wszystkie strony książki jako pliki HTML asynchronicznie
         /// </summary>
         /// <param name="book"></param>
-        /// <param name="dirpath"></param>
-        /// <param name="ctoken">Cancellation token</param>
-        /// <returns>a task that represents the asynchronous save operation </returns>
+        /// <param name="dirpath">Ścieżka folderu</param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
         public async Task SaveBookAsHTMLAsync(Book book, string dirpath,
             CancellationToken ctoken = default)
         {
@@ -341,20 +357,20 @@ namespace OdrabiamyD
             }
         }
         /// <summary>
-        /// 
+        /// Zapisuje kod HTML książki jako tekst w pliku <c>.txt</c> o podanej ścieżce
         /// </summary>
         /// <param name="page"></param>
-        /// <param name="path"></param>
+        /// <param name="path">Ścieżka pliku</param>
         public void SavePageAsText(Page page, string path)
         {
             File.WriteAllText(Path.ChangeExtension(path, "txt"), page.Content);
         }
         /// <summary>
-        /// 
+        /// Zapisuje kod HTML książki jako tekst w pliku <c>.txt</c> o podanej ścieżce asynchronicznie
         /// </summary>
         /// <param name="page"></param>
-        /// <param name="path"></param>
-        /// <param name="ctoken">Cancellation token</param>
+        /// <param name="path">Ścieżka pliku</param>
+        /// <param name="ctoken"></param>
         /// <returns></returns>
         public async Task SavePageAsTextAsync(Page page, string path,
             CancellationToken ctoken = default)
@@ -362,10 +378,10 @@ namespace OdrabiamyD
             await File.WriteAllTextAsync(Path.ChangeExtension(path, "txt"), page.Content, ctoken);
         }
         /// <summary>
-        /// 
+        /// Zapisuje wszystkie obrazki typu <c>.svg</c> o <c>.img</c> ze strony w podanym folderze
         /// </summary>
         /// <param name="page"></param>
-        /// <param name="dir"></param>
+        /// <param name="dir">Ścieżka folderu</param>
         public void SaveAllPageImages(Page page, string dir)
         {
             var html = new HtmlDocument();
@@ -388,10 +404,10 @@ namespace OdrabiamyD
             }
         }
         /// <summary>
-        /// 
+        /// Zapisuje wszystkie obrazki typu <c>.svg</c> o <c>.img</c> ze strony w podanym folderze asynchronicznie
         /// </summary>
         /// <param name="page"></param>
-        /// <param name="dir"></param>
+        /// <param name="dir">Ścieżka folderu</param>
         /// <param name="ctoken"></param>
         /// <returns></returns>
         public async Task SaveAllPageImagesAsync(Page page, string dir, 
@@ -413,10 +429,41 @@ namespace OdrabiamyD
             Directory.CreateDirectory(dir);
             for (int i = 0; i < svgs.Count(); i++)
             {
-                var imagestring = await _client.GetStringAsync(svgs.ElementAt(i).ImageString);
+                var imagestring = await _client.GetStringAsync(svgs.ElementAt(i).ImageString, ctoken);
                 await File.WriteAllTextAsync(Path.Combine(dir, $"image-{i}{svgs.ElementAt(i).Extension}"),
                     imagestring, ctoken);
             }
         }
+        /// <summary>
+        /// Zapisuje w folderze obrazki ze wszystkich stron książki w poszczególnych podfolderach
+        /// </summary>
+        /// <param name="book"></param>
+        /// <param name="dir">Ścieżka folderu</param>
+        public void SaveAllBookImages(Book book, string dir)
+        {
+            Directory.CreateDirectory(dir);
+            foreach (var page in book.Pages)
+            {
+                SaveAllPageImages(page, Path.Combine(dir, $"page_{page.Number}"));
+            }
+        }
+        /// <summary>
+        /// Zapisuje w folderze obrazki ze wszystkich stron książki w poszczególnych podfolderach asynchronicznie
+        /// </summary>
+        /// <param name="book"></param>
+        /// <param name="dir">Ścieżka folderu</param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        public async Task SaveAllBookImagesAsync(Book book, string dir, 
+            CancellationToken ctoken = default)
+        {
+            Directory.CreateDirectory(dir);
+            foreach (var page in book.Pages)
+            {
+                await SaveAllPageImagesAsync(page, Path.Combine(dir, $"page_{page.Number}"), 
+                    ctoken);
+            }
+        }
+        //TODO Documentation in polska, coś jeszcze tam było
     }
 }

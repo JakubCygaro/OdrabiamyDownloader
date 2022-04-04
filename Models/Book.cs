@@ -7,16 +7,16 @@ using System.Threading.Tasks;
 namespace OdrabiamyD.Models
 {
     /// <summary>
-    /// An object modeling a book
+    /// Obiekt modelujący Cionszkę pobieraną z Odrabiamy.pl
     /// </summary>
     public class Book
     {
         /// <summary>
-        /// Id of a book
+        /// ID Cionszki
         /// </summary>
         public int Id { get; init; }
         /// <summary>
-        /// A <c>Page[]</c> representing the pages a book contains
+        /// Tablica <c>Page[]</c> reprezentująca strony pobranej książki
         /// </summary>
         public Page[] Pages { get; init; }
         /// <summary>

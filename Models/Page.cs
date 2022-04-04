@@ -7,16 +7,16 @@ using System.Threading.Tasks;
 namespace OdrabiamyD.Models
 {
     /// <summary>
-    /// An object that models a page
+    /// Obiekt modelujący stronę książki pobraną z Odrabiamy.pl
     /// </summary>
     public class Page
     {
         /// <summary>
-        /// Page number
+        /// Numer strony
         /// </summary>
         public int Number { get; init; }
         /// <summary>
-        /// The content of a page
+        /// Zawartość strony - kod HTML pobrany z Odrabiamy.pl
         /// </summary>
         public string Content { get; init; }
         /// <summary>

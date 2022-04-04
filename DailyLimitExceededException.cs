@@ -7,8 +7,12 @@ using System.Threading.Tasks;
 namespace OdrabiamyD
 {
     /// <summary>
-    /// Exception thrown when the daily limit for premium downloads has been exceeded
+    /// Wyjątek zgłaszany gdy dzienny limit pobrań został przekroczony
     /// </summary>
+    /// <remarks>
+    /// Ja nie wiem jaki ten limit jest, mój ukochany... przyjaciel <c>https://github.com/KartoniarzEssa</c>
+    /// stwierdził że jest to 60 stron, ale pobierałem ich znacznie więcej w ciągu dnia.
+    /// </remarks>
     [Serializable]
     public class DailyLimitExceededException : Exception
     {
