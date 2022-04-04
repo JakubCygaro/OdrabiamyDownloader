@@ -6,6 +6,7 @@ Przy pisaniu biblioteki wykorzystałem kilka pakietów NuGet:
 - System.Configuration.ConfigurationManager 6.0.0
 - Newtonsoft.Json 13.0.1
 - HtmlAgilityPack 1.11.42
+
 ***Próba użycia tej biblioteki bez zaimportowania tych pakietów skończy się błędem cumpilatora***
 # Uwagi 
 OdrabiamyDownloader domyślnie wyszukuje w pliku .config adres endpointu api, jeśli program korzystający z biblioteki
