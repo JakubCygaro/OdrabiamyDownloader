@@ -18,10 +18,10 @@ By używać wersji premium trzeba posiadać konto premium na stronie Odrabiamy.p
 istnieje limit pobrań na dzień, który podobno wynosi 60 stron (a przynajmniej tak powiedział mi mój ukochany... przyjaciel @KartoniarzEssa), 
 ale w trakcie testów byłem w stanie pobrać znacznie więcej w ciągu dnia, także nie wiem jak to jest ostatecznie. 
 Po napotkaniu dziennego limitu biblioteka przestaje pobierać strony i składa książkę tylko z tych stron które udało jej się pobrać.
-Warto też zaznaczyć że przy pobieraniu premium należy zmienić wewnętrzne Headery obiektu OdrabiamyDownloader metodą ```{csharp}ChangeHeaders()```
+Warto też zaznaczyć że przy pobieraniu premium należy zmienić wewnętrzne Headery obiektu OdrabiamyDownloader metodą ```ChangeHeaders()```
 inaczej zostanie zgłoszony wyjątek.
 # Non-Premium
-Biblioteka w wersji nonpremium pobiera tylko strony dostępne w wersji non-premium (czyli bardzo mało), wszystkie strony premium
+Biblioteka w wersji non-premium pobiera tylko strony dostępne w wersji non-premium (czyli bardzo mało), wszystkie strony premium
 będą wypłenione informacją, że dostęp do ich treści wymaga konta premium - co oznacza, że będą bezużytczene.
 ## Przyłady użycia biblioteki
 - [Wersja Konsolowa]()
