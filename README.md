@@ -24,8 +24,8 @@ inaczej zostanie zgłoszony wyjątek.
 Biblioteka w wersji non-premium pobiera tylko strony dostępne w wersji non-premium (czyli bardzo mało), wszystkie strony premium
 będą wypłenione informacją, że dostęp do ich treści wymaga konta premium - co oznacza, że będą bezużytczene.
 ## Przyłady użycia biblioteki
-- [Wersja Konsolowa]()
-- [Wersja Windows Forms]()
+- [Wersja Konsolowa](https://github.com/JakubCygaro/OdrabiamyDownloaderConsole)
+- [Wersja Windows Forms](https://github.com/JakubCygaro/OdrabiamyDownloaderForms)
 ## Inspiracja
 Dla mnie inspiracją była praca [KartoniarzEssa](https://github.com/KartoniarzEssa/BetterOdrabiamyDownloader), od którego ~~zerżnąłem~~ zaporzyczyłem
 sposób wykorzystania API oraz gniot [Kondziorka](https://github.com/konrad11901/OdrabiamyDownloader), przez który rozbolała mnie głowa i uznałem,
