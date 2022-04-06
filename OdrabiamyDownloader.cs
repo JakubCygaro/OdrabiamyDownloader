@@ -490,7 +490,7 @@ namespace OdrabiamyD
             try
             {
                 var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
-                Parallel.For(startpage, lastpage + 1, options, i =>
+                Parallel.For(startpage, lastpage + 1, options, (i, state) =>
                 {
                     try
                     {
@@ -499,11 +499,12 @@ namespace OdrabiamyD
                     }
                     catch (Exception ex)
                     {
-                        if(ex.InnerException is WrongHeadersException) exceptions.Enqueue(ex);
+                        exceptions.Enqueue(ex);
+                        state.Stop();
                     }
                 });
-                Console.WriteLine(exceptions.Count);
                 if (exceptions.Count > 0) throw new AggregateException(exceptions);
+                DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
             }
             catch (AggregateException ae)
             {
@@ -556,8 +557,9 @@ namespace OdrabiamyD
                 });
                 Console.WriteLine(exceptions.Count);
                 if (exceptions.Count > 0) throw new AggregateException(exceptions);
+                DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
             }
-            catch(AggregateException ae)
+            catch (AggregateException ae)
             {
                 foreach(var ex in ae.Flatten().InnerExceptions)
                 {
