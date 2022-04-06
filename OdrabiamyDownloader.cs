@@ -187,16 +187,19 @@ namespace OdrabiamyD
             {
                 try
                 {
-                    pages.Add(await DownloadPageAsync(pageN, bookid, ctoken) ??
-                        throw new Exception());
+                    var page = await DownloadPageAsync(pageN, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
                 }
                 catch (WrongHeadersException)
                 {
                     throw;
                 }
-                catch { }
+                catch
+                {
+                    DownloadStatus?.Invoke($"Could not download page {pageN}!");
+                    throw;
+                }
             }
-
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.ToArray());
         }
@@ -222,8 +225,8 @@ namespace OdrabiamyD
             {
                 try
                 {
-                    pages.Add(await DownloadPagePremiumAsync(pageN, bookid, ctoken) ??
-                        throw new ArgumentException("No pages to download"));
+                    var page = await DownloadPagePremiumAsync(pageN, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
                 }
                 catch(DailyLimitExceededException)
                 {
@@ -237,6 +240,7 @@ namespace OdrabiamyD
                 catch 
                 {
                     DownloadStatus?.Invoke($"Could not download page {pageN}!");
+                    throw;
                 }
             }
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
@@ -273,7 +277,8 @@ namespace OdrabiamyD
             
             var pagedata = content?["data"]?[0]?["solution"]?.Value<string>();
             DownloadStatus?.Invoke($"Finished download of page {page}");
-            return new Page(page, pagedata ?? string.Empty);
+            if (pagedata is null) return null;
+            return new Page(page, pagedata);
         }
         /// <summary>
         /// Pobiera stronę
@@ -299,7 +304,8 @@ namespace OdrabiamyD
 
             var pagedata = content?["data"]?[0]?["solution"]?.Value<string>();
             DownloadStatus?.Invoke($"Finished download of page {page}");
-            return new Page(page, pagedata ?? string.Empty);
+            if(pagedata is null) return null;
+            return new Page(page, pagedata);
         }
         /// <summary>
         /// Zapisuje stronę jako plik HTML
@@ -461,6 +467,106 @@ namespace OdrabiamyD
                     ctoken);
             }
         }
-        //TODO Documentation in polska, coś jeszcze tam było
+        /// <summary>
+        /// WIP - NIE UŻYWAĆ
+        /// </summary>
+        /// <param name="startpage"></param>
+        /// <param name="lastpage"></param>
+        /// <param name="bookid"></param>
+        /// <param name="maxlevelofparallelism"></param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        public Book? DownloadBookMultithread(int startpage, int lastpage, int bookid,
+            int maxlevelofparallelism, CancellationToken ctoken = default )
+        {
+            var pages = new System.Collections.Concurrent.ConcurrentBag<Page>();
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+
+            var options = new ParallelOptions()
+            {
+                CancellationToken = ctoken,
+                MaxDegreeOfParallelism = maxlevelofparallelism,
+            };
+            try
+            {
+                var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+                Parallel.For(startpage, lastpage + 1, options, i =>
+                {
+                    try
+                    {
+                        var page = DownloadPageAsync(i, bookid, ctoken).Result;
+                        if (page is not null) pages.Add(page);
+                    }
+                    catch (Exception ex)
+                    {
+                        if(ex.InnerException is WrongHeadersException) exceptions.Enqueue(ex);
+                    }
+                });
+                Console.WriteLine(exceptions.Count);
+                if (exceptions.Count > 0) throw new AggregateException(exceptions);
+            }
+            catch (AggregateException ae)
+            {
+                foreach(var ex in ae.Flatten().InnerExceptions)
+                {
+                    if (ex is WrongHeadersException) 
+                        throw ex as WrongHeadersException;
+                }
+            }
+
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
+        }
+        /// <summary>
+        /// WIP - NIE UŻYWAĆ
+        /// </summary>
+        /// <param name="startpage"></param>
+        /// <param name="lastpage"></param>
+        /// <param name="bookid"></param>
+        /// <param name="maxlevelofparallelism"></param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        public Book? DownloadBookPremiumMultithread(int startpage, int lastpage, int bookid,
+           int maxlevelofparallelism, CancellationToken ctoken = default)
+        {
+            var pages = new System.Collections.Concurrent.ConcurrentBag<Page>();
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+
+            var options = new ParallelOptions()
+            {
+                CancellationToken = ctoken,
+                MaxDegreeOfParallelism = maxlevelofparallelism,
+            };
+            try
+            {
+                var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+                Parallel.For(startpage, lastpage + 1, options, (i, state) =>
+                {
+                
+                    try
+                    {
+                        var page = DownloadPagePremiumAsync(i, bookid, ctoken).Result;
+                        if(page is not null) pages.Add(page);
+                    }
+                    catch (Exception ex)
+                    {
+                        exceptions.Enqueue(ex);
+                        state.Stop();
+                    }
+                });
+                Console.WriteLine(exceptions.Count);
+                if (exceptions.Count > 0) throw new AggregateException(exceptions);
+            }
+            catch(AggregateException ae)
+            {
+                foreach(var ex in ae.Flatten().InnerExceptions)
+                {
+                    if (ex is DailyLimitExceededException) throw ex as DailyLimitExceededException;
+                    if (ex is WrongHeadersException) throw ex as WrongHeadersException;
+                }
+            }
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
+        }
     }
 }
