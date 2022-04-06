@@ -503,8 +503,11 @@ namespace OdrabiamyD
                         state.Stop();
                     }
                 });
-                if (exceptions.Count > 0) throw new AggregateException(exceptions);
-                DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
+                if (exceptions.Count > 0)
+                {
+                    DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
+                    throw new AggregateException(exceptions);
+                }
             }
             catch (AggregateException ae)
             {
@@ -555,9 +558,11 @@ namespace OdrabiamyD
                         state.Stop();
                     }
                 });
-                Console.WriteLine(exceptions.Count);
-                if (exceptions.Count > 0) throw new AggregateException(exceptions);
-                DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
+                if (exceptions.Count > 0) 
+                {
+                    DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
+                    throw new AggregateException(exceptions);
+                }
             }
             catch (AggregateException ae)
             {
