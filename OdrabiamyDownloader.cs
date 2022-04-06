@@ -194,6 +194,7 @@ namespace OdrabiamyD
                 {
                     throw;
                 }
+                catch (ArgumentOutOfRangeException) { }
                 catch
                 {
                     DownloadStatus?.Invoke($"Could not download page {pageN}!");
@@ -237,6 +238,7 @@ namespace OdrabiamyD
                 {
                     throw;
                 }
+                catch (ArgumentOutOfRangeException) { }
                 catch 
                 {
                     DownloadStatus?.Invoke($"Could not download page {pageN}!");
@@ -497,6 +499,7 @@ namespace OdrabiamyD
                         var page = DownloadPageAsync(i, bookid, ctoken).Result;
                         if (page is not null) pages.Add(page);
                     }
+                    catch (ArgumentOutOfRangeException) { }
                     catch (Exception ex)
                     {
                         exceptions.Enqueue(ex);
@@ -552,6 +555,7 @@ namespace OdrabiamyD
                         var page = DownloadPagePremiumAsync(i, bookid, ctoken).Result;
                         if(page is not null) pages.Add(page);
                     }
+                    catch (ArgumentOutOfRangeException) { }
                     catch (Exception ex)
                     {
                         exceptions.Enqueue(ex);
