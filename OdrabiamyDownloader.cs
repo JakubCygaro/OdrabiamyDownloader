@@ -86,14 +86,14 @@ namespace OdrabiamyD
         /// Żeby korzystać metod z "Premium" w nazwie, trzeba zmienić headery na <c>Headers.Premium</c> 
         /// </remarks>
         /// <param name="headers"></param>
-        public void ChangeHeaders(Headers headers)
+        /// <param name="token">Opcjonalny token logowania potrzebny jeśli zamierzasz używać funkcji premium</param>
+        public void ChangeHeaders(Headers headers, string? token = default)
         {
             _client.DefaultRequestHeaders.Clear();
             switch (headers)
             {
                 case Headers.NonPremium:
 
-                    
                     _client.DefaultRequestHeaders.Accept.Add(
                         new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("*/*"));
                     _client.DefaultRequestHeaders.UserAgent.Add(
@@ -110,6 +110,8 @@ namespace OdrabiamyD
 
                 case Headers.Premium:
 
+                    _client.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue(token ?? "");
                     _client.DefaultRequestHeaders.Accept.Add(
                         new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("*/*"));
                     _client.DefaultRequestHeaders.UserAgent.Add(
@@ -169,7 +171,6 @@ namespace OdrabiamyD
         /// <summary>
         /// Próbuje pobrać wszystkie strony w podanym przedziale i tworzy z nich książkę
         /// </summary>
-        /// <param name="token"></param>
         /// <param name="startpage">Pierwsza strona</param>
         /// <param name="lastpage">Ostatnia strona</param>
         /// <param name="bookid">ID Cionszki</param>
@@ -177,22 +178,25 @@ namespace OdrabiamyD
         /// <returns></returns>
         /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
         /// </exception>
-        public async Task<Book> DownloadBookAsync(string token, int startpage, int lastpage, int bookid,
+        public async Task<Book> DownloadBookAsync(int startpage, int lastpage, int bookid,
             CancellationToken ctoken = default)
         {
-            if (Headers != Headers.NonPremium)
-                throw new WrongHeadersException("Wrong headers!", Headers);
             DownloadStatus?.Invoke($"Started download of book {bookid}");
             var pages = new List<Page>();
             for (int pageN = startpage; pageN <= lastpage; pageN++)
             {
                 try
                 {
-                    pages.Add(await DownloadPageAsync(token, pageN, bookid, ctoken) ??
+                    pages.Add(await DownloadPageAsync(pageN, bookid, ctoken) ??
                         throw new Exception());
+                }
+                catch (WrongHeadersException)
+                {
+                    throw;
                 }
                 catch { }
             }
+
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.ToArray());
         }
@@ -200,7 +204,6 @@ namespace OdrabiamyD
         /// Próbuje pobrać wszystkie strony w podanym przedziale i tworzy z nich książkę,
         /// używając konta premium
         /// </summary>
-        /// <param name="token"></param>
         /// <param name="startpage">Strona startowa</param>
         /// /// <param name="lastpage">Ostatnia strona</param>
         /// <param name="bookid">ID Cionszki</param>
@@ -210,24 +213,26 @@ namespace OdrabiamyD
         /// </exception>
         /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
         /// </exception>
-        public async Task<Book> DownloadBookPremiumAsync(string token, int startpage, int lastpage, int bookid,
+        public async Task<Book> DownloadBookPremiumAsync(int startpage, int lastpage, int bookid,
             CancellationToken ctoken = default)
         {
-            if (Headers != Headers.Premium)
-                throw new WrongHeadersException("Wrong headers!", Headers);
             var pages = new List<Page>();
             DownloadStatus?.Invoke($"Started download of book {bookid}");
             for (int pageN = startpage; pageN <= lastpage; pageN++)
             {
                 try
                 {
-                    pages.Add(await DownloadPagePremiumAsync(token, pageN, bookid, ctoken) ??
+                    pages.Add(await DownloadPagePremiumAsync(pageN, bookid, ctoken) ??
                         throw new ArgumentException("No pages to download"));
                 }
                 catch(DailyLimitExceededException)
                 {
                     DownloadStatus?.Invoke("Daily download limit reached!");
                     break;
+                }
+                catch (WrongHeadersException)
+                {
+                    throw;
                 }
                 catch 
                 {
@@ -240,7 +245,6 @@ namespace OdrabiamyD
         /// <summary>
         /// Pobiera stronę w wersji premium
         /// </summary>
-        /// <param name="token"></param>
         /// <param name="page">Numer strony</param>
         /// <param name="bookid">ID Cionszki</param>
         /// <param name="ctoken"></param>
@@ -248,14 +252,11 @@ namespace OdrabiamyD
         /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
         /// </exception>
         /// <exception cref="DailyLimitExceededException">Zgłaszany gdy dzienny limit pobrań został przekroczony</exception>
-        public async Task<Page?> DownloadPagePremiumAsync(string token, int page, int bookid, 
+        public async Task<Page?> DownloadPagePremiumAsync(int page, int bookid, 
             CancellationToken ctoken = default)
         {
             if (Headers != Headers.Premium)
                 throw new WrongHeadersException("Wrong headers!", Headers);
-
-            _client.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue(token);
 
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get,
                 $@"https://odrabiamy.pl/api/v2/exercises/page/premium/{page}/{bookid}");
@@ -277,21 +278,17 @@ namespace OdrabiamyD
         /// <summary>
         /// Pobiera stronę
         /// </summary>
-        /// <param name="token"></param>
         /// <param name="page">Numer strony</param>
         /// <param name="bookid">ID Cionszki</param>
         /// <param name="ctoken"></param>
         /// <returns></returns>
         /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
         /// </exception>
-        public async Task<Page?> DownloadPageAsync(string token, int page, int bookid,
+        public async Task<Page?> DownloadPageAsync(int page, int bookid,
             CancellationToken ctoken = default)
         {
             if (Headers != Headers.NonPremium)
                 throw new WrongHeadersException("Wrong headers!", Headers);
-
-            _client.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue(token);
 
             HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get,
                 $@"https://odrabiamy.pl/api/v2/exercises/page/{page}/{bookid}");
