@@ -307,6 +307,7 @@ namespace OdrabiamyD
             var pagedata = content?["data"]?[0]?["solution"]?.Value<string>();
             DownloadStatus?.Invoke($"Finished download of page {page}");
             if(pagedata is null) return null;
+            //pagedata = TrimSolution(pagedata);
             return new Page(page, pagedata);
         }
         /// <summary>
@@ -470,7 +471,7 @@ namespace OdrabiamyD
             }
         }
         /// <summary>
-        /// WIP - NIE UŻYWAĆ
+        /// Metoda pobierająca książkę przy wykożystaniu wielowątkowości
         /// </summary>
         /// <param name="startpage"></param>
         /// <param name="lastpage"></param>
@@ -478,7 +479,7 @@ namespace OdrabiamyD
         /// <param name="maxlevelofparallelism"></param>
         /// <param name="ctoken"></param>
         /// <returns></returns>
-        public Book? DownloadBookMultithread(int startpage, int lastpage, int bookid,
+        public Book DownloadBookMultithread(int startpage, int lastpage, int bookid,
             int maxlevelofparallelism, CancellationToken ctoken = default )
         {
             var pages = new System.Collections.Concurrent.ConcurrentBag<Page>();
@@ -499,11 +500,11 @@ namespace OdrabiamyD
                         var page = DownloadPageAsync(i, bookid, ctoken).Result;
                         if (page is not null) pages.Add(page);
                     }
-                    catch (ArgumentOutOfRangeException) { }
                     catch (Exception ex)
                     {
+                        if (ex.InnerException is ArgumentOutOfRangeException) return;
                         exceptions.Enqueue(ex);
-                        state.Stop();
+                        state.Break();
                     }
                 });
                 if (exceptions.Count > 0)
@@ -517,7 +518,7 @@ namespace OdrabiamyD
                 foreach(var ex in ae.Flatten().InnerExceptions)
                 {
                     if (ex is WrongHeadersException) 
-                        throw ex as WrongHeadersException;
+                        throw ex;
                 }
             }
 
@@ -525,7 +526,7 @@ namespace OdrabiamyD
             return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
         }
         /// <summary>
-        /// WIP - NIE UŻYWAĆ
+        /// Metoda pobierająca książkę premium przy wykożystaniu wielowątkowości
         /// </summary>
         /// <param name="startpage"></param>
         /// <param name="lastpage"></param>
@@ -533,7 +534,7 @@ namespace OdrabiamyD
         /// <param name="maxlevelofparallelism"></param>
         /// <param name="ctoken"></param>
         /// <returns></returns>
-        public Book? DownloadBookPremiumMultithread(int startpage, int lastpage, int bookid,
+        public Book DownloadBookPremiumMultithread(int startpage, int lastpage, int bookid,
            int maxlevelofparallelism, CancellationToken ctoken = default)
         {
             var pages = new System.Collections.Concurrent.ConcurrentBag<Page>();
@@ -549,17 +550,16 @@ namespace OdrabiamyD
                 var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
                 Parallel.For(startpage, lastpage + 1, options, (i, state) =>
                 {
-                
                     try
                     {
                         var page = DownloadPagePremiumAsync(i, bookid, ctoken).Result;
                         if(page is not null) pages.Add(page);
                     }
-                    catch (ArgumentOutOfRangeException) { }
                     catch (Exception ex)
                     {
+                        if (ex.InnerException is ArgumentOutOfRangeException) return;
                         exceptions.Enqueue(ex);
-                        state.Stop();
+                        state.Break();
                     }
                 });
                 if (exceptions.Count > 0) 
@@ -572,12 +572,33 @@ namespace OdrabiamyD
             {
                 foreach(var ex in ae.Flatten().InnerExceptions)
                 {
-                    if (ex is DailyLimitExceededException) throw ex as DailyLimitExceededException;
-                    if (ex is WrongHeadersException) throw ex as WrongHeadersException;
+                    if (ex is DailyLimitExceededException) 
+                        DownloadStatus?.Invoke("Daily download limit reached!");
+                    if (ex is WrongHeadersException) throw ex;
                 }
             }
+
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
+        }
+        /// <summary>
+        /// WIP
+        /// </summary>
+        /// <param name="rawsolution"></param>
+        /// <returns></returns>
+        private string TrimSolution(string rawsolution)
+        {
+            HtmlDocument doc = new HtmlDocument();
+            doc.LoadHtml(rawsolution);
+            foreach (var node in doc.DocumentNode.ChildNodes.Nodes())
+            {
+                foreach (var attribute in node.Attributes)
+                {
+                    //if (attribute.Value == "math small")
+                    //    node.remo
+                }
+            }
+            return doc.DocumentNode.OuterHtml;
         }
     }
 }
