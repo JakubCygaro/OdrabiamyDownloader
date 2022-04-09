@@ -187,16 +187,20 @@ namespace OdrabiamyD
             {
                 try
                 {
-                    pages.Add(await DownloadPageAsync(pageN, bookid, ctoken) ??
-                        throw new Exception());
+                    var page = await DownloadPageAsync(pageN, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
                 }
                 catch (WrongHeadersException)
                 {
                     throw;
                 }
-                catch { }
+                catch (ArgumentOutOfRangeException) { }
+                catch
+                {
+                    DownloadStatus?.Invoke($"Could not download page {pageN}!");
+                    throw;
+                }
             }
-
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.ToArray());
         }
@@ -222,8 +226,8 @@ namespace OdrabiamyD
             {
                 try
                 {
-                    pages.Add(await DownloadPagePremiumAsync(pageN, bookid, ctoken) ??
-                        throw new ArgumentException("No pages to download"));
+                    var page = await DownloadPagePremiumAsync(pageN, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
                 }
                 catch(DailyLimitExceededException)
                 {
@@ -234,9 +238,11 @@ namespace OdrabiamyD
                 {
                     throw;
                 }
+                catch (ArgumentOutOfRangeException) { }
                 catch 
                 {
                     DownloadStatus?.Invoke($"Could not download page {pageN}!");
+                    throw;
                 }
             }
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
@@ -273,7 +279,8 @@ namespace OdrabiamyD
             
             var pagedata = content?["data"]?[0]?["solution"]?.Value<string>();
             DownloadStatus?.Invoke($"Finished download of page {page}");
-            return new Page(page, pagedata ?? string.Empty);
+            if (pagedata is null) return null;
+            return new Page(page, pagedata);
         }
         /// <summary>
         /// Pobiera stronę
@@ -299,7 +306,9 @@ namespace OdrabiamyD
 
             var pagedata = content?["data"]?[0]?["solution"]?.Value<string>();
             DownloadStatus?.Invoke($"Finished download of page {page}");
-            return new Page(page, pagedata ?? string.Empty);
+            if(pagedata is null) return null;
+            //pagedata = TrimSolution(pagedata);
+            return new Page(page, pagedata);
         }
         /// <summary>
         /// Zapisuje stronę jako plik HTML
@@ -461,6 +470,205 @@ namespace OdrabiamyD
                     ctoken);
             }
         }
-        //TODO Documentation in polska, coś jeszcze tam było
+        /// <summary>
+        /// Metoda pobierająca książkę przy wykożystaniu wielowątkowości
+        /// </summary>
+        /// <param name="startpage"></param>
+        /// <param name="lastpage"></param>
+        /// <param name="bookid"></param>
+        /// <param name="maxlevelofparallelism"></param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        public Book DownloadBookMultithread(int startpage, int lastpage, int bookid,
+            int maxlevelofparallelism, CancellationToken ctoken = default )
+        {
+            var pages = new System.Collections.Concurrent.ConcurrentBag<Page>();
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+
+            var options = new ParallelOptions()
+            {
+                CancellationToken = ctoken,
+                MaxDegreeOfParallelism = maxlevelofparallelism,
+            };
+            try
+            {
+                var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+                Parallel.For(startpage, lastpage + 1, options, (i, state) =>
+                {
+                    try
+                    {
+                        var page = DownloadPageAsync(i, bookid, ctoken).Result;
+                        if (page is not null) pages.Add(page);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (ex.InnerException is ArgumentOutOfRangeException) return;
+                        exceptions.Enqueue(ex);
+                        state.Break();
+                    }
+                });
+                if (exceptions.Count > 0)
+                {
+                    DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
+                    throw new AggregateException(exceptions);
+                }
+            }
+            catch (AggregateException ae)
+            {
+                foreach(var ex in ae.Flatten().InnerExceptions)
+                {
+                    if (ex is WrongHeadersException) 
+                        throw ex;
+                }
+            }
+
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
+        }
+        /// <summary>
+        /// Metoda pobierająca książkę premium przy wykożystaniu wielowątkowości
+        /// </summary>
+        /// <param name="startpage"></param>
+        /// <param name="lastpage"></param>
+        /// <param name="bookid"></param>
+        /// <param name="maxlevelofparallelism"></param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        public Book DownloadBookPremiumMultithread(int startpage, int lastpage, int bookid,
+           int maxlevelofparallelism, CancellationToken ctoken = default)
+        {
+            var pages = new System.Collections.Concurrent.ConcurrentBag<Page>();
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+
+            var options = new ParallelOptions()
+            {
+                CancellationToken = ctoken,
+                MaxDegreeOfParallelism = maxlevelofparallelism,
+            };
+            try
+            {
+                var exceptions = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+                Parallel.For(startpage, lastpage + 1, options, (i, state) =>
+                {
+                    try
+                    {
+                        var page = DownloadPagePremiumAsync(i, bookid, ctoken).Result;
+                        if(page is not null) pages.Add(page);
+                    }
+                    catch (Exception ex)
+                    {
+                        if (ex.InnerException is ArgumentOutOfRangeException) return;
+                        exceptions.Enqueue(ex);
+                        state.Break();
+                    }
+                });
+                if (exceptions.Count > 0) 
+                {
+                    DownloadStatus?.Invoke($"Multithreaded download -> Exceptions occured! {exceptions.Count}");
+                    throw new AggregateException(exceptions);
+                }
+            }
+            catch (AggregateException ae)
+            {
+                foreach(var ex in ae.Flatten().InnerExceptions)
+                {
+                    if (ex is DailyLimitExceededException) 
+                        DownloadStatus?.Invoke("Daily download limit reached!");
+                    if (ex is WrongHeadersException) throw ex;
+                }
+            }
+
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
+        }
+        /// <summary>
+        /// Znajduje numery stron książki o podanym id
+        /// </summary>
+        /// <param name="bookid"></param>
+        /// <returns></returns>
+        private async Task<int[]?> GetPages(int bookid)
+        {
+            var json = await _client.GetStringAsync($"https://odrabiamy.pl/api/v1.3/ksiazki/{bookid}");
+
+            JObject? content = (JObject?)Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(json);
+            var pages = content?["pages"]?.Value<JArray>();
+
+            return pages?.ToObject<int[]>();
+        }
+        /// <summary>
+        /// Próbuje pobrać wszystkie strony i tworzy z nich książkę
+        /// </summary>
+        /// <param name="bookid"></param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        public async Task<Book> DownloadBookAsync(int bookid, CancellationToken ctoken = default)
+        {
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+            var pages = new List<Page>();
+            var numbers = await GetPages(bookid) ?? throw new Exception("No pages for given book id!");
+            foreach (var pagen in numbers)
+            {
+                try
+                {
+                    var page = await DownloadPageAsync(pagen, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
+                }
+                catch (WrongHeadersException)
+                {
+                    throw;
+                }
+                catch (ArgumentOutOfRangeException) { }
+                catch
+                {
+                    DownloadStatus?.Invoke($"Could not download page {pagen}!");
+                    throw;
+                }
+            }
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.ToArray());
+        }
+        /// <summary>
+        /// Próbuje pobrać wszystkie strony i tworzy z nich książkę
+        /// używając konta premium
+        /// </summary>
+        /// <param name="bookid">ID Cionszki</param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException">Throw when there was no page to download for given number
+        /// </exception>
+        /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
+        /// </exception>
+        public async Task<Book> DownloadBookPremiumAsync(int bookid, CancellationToken ctoken = default)
+        {
+            var pages = new List<Page>();
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+            var numbers = await GetPages(bookid) ?? throw new Exception("No pages for given book id!");
+            foreach (var pagen in numbers)
+            {
+                try
+                {
+                    var page = await DownloadPagePremiumAsync(pagen, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
+                }
+                catch (DailyLimitExceededException)
+                {
+                    DownloadStatus?.Invoke("Daily download limit reached!");
+                    break;
+                }
+                catch (WrongHeadersException)
+                {
+                    throw;
+                }
+                catch (ArgumentOutOfRangeException) { }
+                catch
+                {
+                    DownloadStatus?.Invoke($"Could not download page {pagen}!");
+                    throw;
+                }
+            }
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.ToArray());
+        }
     }
 }
