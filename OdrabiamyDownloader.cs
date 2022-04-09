@@ -581,24 +581,89 @@ namespace OdrabiamyD
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
         }
-        /// <summary>
-        /// WIP
-        /// </summary>
-        /// <param name="rawsolution"></param>
-        /// <returns></returns>
-        private string TrimSolution(string rawsolution)
+        private async Task<int[]?> GetPages(int bookid)
         {
-            HtmlDocument doc = new HtmlDocument();
-            doc.LoadHtml(rawsolution);
-            foreach (var node in doc.DocumentNode.ChildNodes.Nodes())
+            var json = await _client.GetStringAsync($"https://odrabiamy.pl/api/v1.3/ksiazki/{bookid}");
+
+            JObject? content = (JObject?)Newtonsoft.Json.JsonConvert.DeserializeObject<JObject>(json);
+            var pages = content?["pages"]?.Value<JArray>();
+
+            return pages?.ToObject<int[]>();
+        }
+        /// <summary>
+        /// Próbuje pobrać wszystkie strony i tworzy z nich książkę
+        /// </summary>
+        /// <param name="bookid"></param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        public async Task<Book> DownloadBookAsync(int bookid, CancellationToken ctoken = default)
+        {
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+            var pages = new List<Page>();
+            var numbers = await GetPages(bookid) ?? throw new Exception("No pages for given book id!");
+            foreach (var pagen in numbers)
             {
-                foreach (var attribute in node.Attributes)
+                try
                 {
-                    //if (attribute.Value == "math small")
-                    //    node.remo
+                    var page = await DownloadPageAsync(pagen, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
+                }
+                catch (WrongHeadersException)
+                {
+                    throw;
+                }
+                catch (ArgumentOutOfRangeException) { }
+                catch
+                {
+                    DownloadStatus?.Invoke($"Could not download page {pagen}!");
+                    throw;
                 }
             }
-            return doc.DocumentNode.OuterHtml;
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.ToArray());
+        }
+        /// <summary>
+        /// Próbuje pobrać wszystkie strony i tworzy z nich książkę
+        /// używając konta premium
+        /// </summary>
+        /// <param name="bookid">ID Cionszki</param>
+        /// <param name="ctoken"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException">Throw when there was no page to download for given number
+        /// </exception>
+        /// <exception cref="WrongHeadersException">Zgłaszany gdy obecnie ustawione headery są niepoprawne
+        /// </exception>
+        public async Task<Book> DownloadBookPremiumAsync(int bookid, CancellationToken ctoken = default)
+        {
+            var pages = new List<Page>();
+            DownloadStatus?.Invoke($"Started download of book {bookid}");
+            var numbers = await GetPages(bookid) ?? throw new Exception("No pages for given book id!");
+            foreach (var pagen in numbers)
+            {
+                try
+                {
+                    var page = await DownloadPagePremiumAsync(pagen, bookid, ctoken);
+                    if (page is not null) pages.Add(page);
+                }
+                catch (DailyLimitExceededException)
+                {
+                    DownloadStatus?.Invoke("Daily download limit reached!");
+                    break;
+                }
+                catch (WrongHeadersException)
+                {
+                    throw;
+                }
+                catch (ArgumentOutOfRangeException) { }
+                catch
+                {
+                    DownloadStatus?.Invoke($"Could not download page {pagen}!");
+                    throw;
+                }
+            }
+            DownloadStatus?.Invoke($"Finished download of book {bookid}");
+            return new Book(bookid, pages.ToArray());
         }
     }
 }
