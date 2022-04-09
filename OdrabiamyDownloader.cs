@@ -581,6 +581,11 @@ namespace OdrabiamyD
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
         }
+        /// <summary>
+        /// Znajduje numery stron książki o podanym id
+        /// </summary>
+        /// <param name="bookid"></param>
+        /// <returns></returns>
         private async Task<int[]?> GetPages(int bookid)
         {
             var json = await _client.GetStringAsync($"https://odrabiamy.pl/api/v1.3/ksiazki/{bookid}");
