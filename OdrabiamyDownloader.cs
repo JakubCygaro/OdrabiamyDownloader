@@ -581,12 +581,31 @@ namespace OdrabiamyD
             DownloadStatus?.Invoke($"Finished download of book {bookid}");
             return new Book(bookid, pages.OrderBy(p => p.Number).ToArray());
         }
+        ///// <summary>
+        ///// WIP
+        ///// </summary>
+        ///// <param name="rawsolution"></param>
+        ///// <returns></returns>
+        //private string TrimSolution(string rawsolution)
+        //{
+        //    HtmlDocument doc = new HtmlDocument();
+        //    doc.LoadHtml(rawsolution);
+        //    foreach (var node in doc.DocumentNode.ChildNodes.Nodes())
+        //    {
+        //        foreach (var attribute in node.Attributes)
+        //        {
+        //            //if (attribute.Value == "math small")
+        //            //    node.remo
+        //        }
+        //    }
+        //    return doc.DocumentNode.OuterHtml;
+        //}
         /// <summary>
         /// Znajduje numery stron książki o podanym id
         /// </summary>
         /// <param name="bookid"></param>
         /// <returns></returns>
-        private async Task<int[]?> GetPages(int bookid)
+        public async Task<int[]?> GetPages(int bookid)
         {
             var json = await _client.GetStringAsync($"https://odrabiamy.pl/api/v1.3/ksiazki/{bookid}");
 
